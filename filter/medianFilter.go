@@ -114,19 +114,36 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	immutableData := makeImmutableMatrix(getPixelData(img))
 	var newPixelData [][]uint8
-	
+
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
 	} else {
-		panic("TODO Implement me")
-	}
+		var workers []chan [][]uint8
+		for i := 0; i < threads; i++ {
+			workers = append(workers, make(chan [][]uint8))
+			go worker((height/threads)*i, (height/threads)*i+1, 0, 1, immutableData, workers[i])
+		}
+		var newData [][]uint8
+		for i := 0; i < threads; i++ {
+			buffer := <-workers[i]
+			newData = append(newData, buffer...)
+		}
 
+	}
 	imout := image.NewGray(image.Rect(0, 0, width, height))
+	if threads > 1 {
+		imout.Pix = flattenImage(newData)
+	}
 	imout.Pix = flattenImage(newPixelData)
 	ofp, _ := os.Create(filepathOut)
 	defer ofp.Close()
 	err := png.Encode(ofp, imout)
 	check(err)
+}
+
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
+	buffer := medianFilter(startY, endY, startX, endX, data)
+	out <- buffer
 }
 
 // main reads in the filepath flags or sets them to default values and calls filter().
