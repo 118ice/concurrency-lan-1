@@ -114,27 +114,24 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	immutableData := makeImmutableMatrix(getPixelData(img))
 	var newPixelData [][]uint8
-
+	imout := image.NewGray(image.Rect(0, 0, width, height))
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
+		imout.Pix = flattenImage(newPixelData)
 	} else {
 		var workers []chan [][]uint8
 		for i := 0; i < threads; i++ {
 			workers = append(workers, make(chan [][]uint8))
-			go worker((height/threads)*i, (height/threads)*i+1, 0, 1, immutableData, workers[i])
+			go worker((height/threads)*i, (height/threads)*(i+1), 0, width, immutableData, workers[i])
 		}
 		var newData [][]uint8
 		for i := 0; i < threads; i++ {
 			buffer := <-workers[i]
 			newData = append(newData, buffer...)
 		}
+		imout.Pix = flattenImage(newData)
 
 	}
-	imout := image.NewGray(image.Rect(0, 0, width, height))
-	if threads > 1 {
-		imout.Pix = flattenImage(newData)
-	}
-	imout.Pix = flattenImage(newPixelData)
 	ofp, _ := os.Create(filepathOut)
 	defer ofp.Close()
 	err := png.Encode(ofp, imout)
@@ -167,7 +164,7 @@ func main() {
 	flag.IntVar(
 		&threads,
 		"threads",
-		1,
+		16,
 		"Specify the number of worker threads to use.")
 
 	flag.Parse()
